@@ -1,0 +1,99 @@
+.TH NFTOP 8
+.\"
+.\" nftop.8:
+.\" Manual page for nftop.
+.\"
+.\" $Id: nftop.8,v 1.0 2023/06/18 11:06:12 pdw Exp $
+.\"
+.PP
+.SH NAME
+nftop - display bandwidth utilization of nfconntrack connections
+.PP
+.SH SYNOPSIS
+\fBnftop\fP -h [\-46dbnNPrRS] [\-a \fIage_format\fP] [\-i \fIin interface\fP]
+     [\-o \fIout interface\fP] [\-s \fI[+]sort column\fP] [\-t \fIthreshold\fP]
+     [\-u \fIupdate interval\fP] [\-w]
+.PP
+.SH DESCRIPTION
+\fBnftop\fP is used to display bandwidth utilization, connection state, source/destination addresses/hostnames, protocol, port, connection age and in/out interface of netfilter connection-tracking entires.
+.PP
+\fBnftop\fP is only viable when utilizing netfilter connection tracking (i.e. SNAT/DNAT/MASQ, or statfull firewall rules) with netfilter connection accounting enabled 
+(\fBnet.netfilter.nf_conntrack_acct\fP kernel option). Optionally, the \fBage\fP of the connection can be displayed if the \fBnet.netfilter.nf_conntrack_timestamp\fP kernel option is enabled.
+.PP
+This utility was inspired by tools like \fBiftop\fP and \fBpftop\fP (on BSD). This being for netfilter connections has the added benifit of providing bandwidth utilization for all connections and all interfaces tracked by netfilter.
+.PP
+.SH OPTIONS
+-4                    output only IPv4 connections
+.br
+-6                    output only IPv6 connections
+.br
+-d|--dev              output device table instead of connections
+.br
+-b|--bytes            output bytes insted of bits (Bps vs. bps)
+.br
+-B|--bps              output the connection/interface only in bits-per-second, without scaling to Kbps, Mpbs, etc.
+.br
+-c|--continuous       output continously without display header or performing screen refresh
+.br
+-I|--id               output the connection tracking ID
+.br
+-L|--loopback         include connections on loopback interfaces (IFF_LOOPBACK)
+.br
+-n|--numeric-local    numeric local IP address
+.br
+-N|--numeric-remote   numeric remote IP address
+.br
+-M|--machine          output continuously without header and do not scale the units (bps/Bps only) (-c and -B)
+.br
+-P|--numeric-port     numeric port
+.br
+-r|--redact-local     obfuscate the local connection address in the output
+.br
+-R|--redact-remote    obfuscate the remote connection address in the output
+.br
+-S|--si               output Standards International nomenclature (Ki, Mi, Gi, ...)
+.br
+-a|--age  0-2         format of age column 0: do not display, 1: seconds, 2: DD HH MM SS format (default is do not display)
+.br
+                        (only availble if "net.netfilter.nf_conntrack_timestamp" kernel option is enabled)
+.br
+-t|--threshold  \fIbits\fP  minimum \fBSUM\fP value to display (in bits)
+.br
+-u|--update  \fIseconds\fP  update interval in seconds
+.br
+-i|--in    \fIinterface\fP  interface name to filter as input interface (supports "\fB+\fP" as wildcard at end of name)
+.br
+-o|--out   \fIinterface\fP  interface name to filter as output interface (supports "\fB+\fP" as wildcard at end of name)
+.br
+-s|--sort  [+]\fIcolumn\fP  column to sort by -- one of [id, in, out, sport, dport, rx, tx, sum]
+.br
+                        the default is \fBDESCENDING\fP order; use +\fIcolumn\fP to sort in \fBASCENDING\fP order
+.br
+-v|--version          output version and exit
+.br
+-V|--verbose          Enable the connection state field (ASSURED, TIME_WAIT, CLOSING, etc.)
+.br
+-w|--wide             output report in wide format (single row for both SRC and DST)
+.PP
+.SH EXAMPLES
+\fBnftop -o wwan0\fP    - only output connections that egress interface "wwan0"
+.br
+\fBnftop -t 1000000\fP  - only output connections that are at least 1Mbps (sum of both tx and rx)
+.br
+\fBnftop -i vlan+\fP    - only output connections that match ingress interface "vlan*"
+.br
+\fBnftop -o eth+\fP     - only output connections that match egress interface "eth*"
+.br
+\fBnftop -s +id\fP      - sort output by ID column in ASCENDING order
+.PP
+.SH NOTES
+When sorting by a field that is not visble by default (e.g. \fIid\fP, \fIage\fP), \fBnftop\fP will not automically enable visibility of that column/field, however the chosen sorting method will still be used, if applicable; see \fBCAVEATS\fP
+.PP
+.SH CAVEATS
+The \fIage\fP column will not display unless the "net.netfilter.nf_conntrack_timestamp" kernel option is enabled. Additionally, the bandwidth calculation may be slightly less accurate sans the timestamp field.
+.PP
+The \fIdev\fP display mode does not include loopback devices by default. Enable with the \fI-l\fP argument, or press \fBl\fP while running.
+.PP
+.SH SEE ALSO
+.BR conntrack (8)
+.BR iftop (8)

@@ -1,0 +1,6 @@
+bin/
+**/*.rs.bk
+*.o
+*.swp
+.vscode/
+.vagrant/

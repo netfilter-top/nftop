@@ -41,38 +41,38 @@ libnetfilter-conntrack
 nftop: Display connection information from netfilter conntrack entries (including at-the-time throughput values for transmit, receive and sum)
 Usage:
 nftop [-46dbnNPrRS] [-a age_format] [-i in interface] [-o out interface] [-s sort column] [-t threshold] [-u update interval]  [-w]
-  -4                    output only IPv4 connections
-  -6                    output only IPv6 connections
-  -d|--dev              output device table instead of connections
-  -b|--bytes		        output bytes insted of default bits
-  -B|--bps              output the connection/interface only in bits-per-second, without scaling to Kbps, Mpbs, etc.
-  -c|--continuous       output continously without display header or performing screen refresh
-  -I|--id               output connection tracking ID
-  -L|--loopback		      include connections on loopback interfaces (IFF_LOOPBACK)
-  -n|--numeric-local	  numeric local IP address
-  -N|--numeric-remote	  numeric remote IP address
-  -M|--machine          output continuously without header and do not scale the unit (bps/Bps only) (-c and -B)
-  -P|--numeric-port	    numeric port
-  -r|--redact-local	    obfuscate the local connection address
-  -R|--redact-remote	  obfuscate the remote connection address
-  -S|--si		            output Standards International nomenclature (Ki, Mi, Gi, ...)
-  -a|--age  0-2		      format of age column 0: do not display, 1: seconds, 2: DD HH MM SS format (default is do not display)
-                        (only availble if "net.netfilter.nf_conntrack_timestamp" kernel option is enabled)
+  -4					output only IPv4 connections
+  -6					output only IPv6 connections
+  -d|--dev				output device table instead of connections
+  -b|--bytes			output bytes insted of default bits
+  -B|--bps				output the connection/interface only in bits-per-second, without scaling to Kbps, Mpbs, etc.
+  -c|--continuous		output continously without display header or performing screen refresh
+  -I|--id				output connection tracking ID
+  -L|--loopback			include connections on loopback interfaces (IFF_LOOPBACK)
+  -n|--numeric-local	numeric local IP address
+  -N|--numeric-remote	numeric remote IP address
+  -M|--machine			output continuously without header and do not scale the unit (bps/Bps only) (-c and -B)
+  -P|--numeric-port		numeric port
+  -r|--redact-local		obfuscate the local connection address
+  -R|--redact-remote	obfuscate the remote connection address
+  -S|--si				output Standards International nomenclature (Ki, Mi, Gi, ...)
+  -a|--age  0-2			format of age column 0: do not display, 1: seconds, 2: DD HH MM SS format (default is do not display)
+							(only availble if "net.netfilter.nf_conntrack_timestamp" kernel option is enabled)
   -t|--threshold  bits	minimum SUM value to display (in bits)
   -u|--update  seconds	update interval in seconds
   -i|--in    interface	interface name to filter as input interface
   -o|--out   interface	interface name to filter as output interface
   -s|--sort  [+]column	column to sort by -- one of [id, in, out, sport, dport, rx, tx, sum]
-                        the default is DESCENDING order; use +column to sort in ASCENDING order
-  -v|--version          version
-  -V|--verbose          Enable the TCP state field
-  -w|--wide             output report in wide format (single row for both SRC and DST)
+							the default is DESCENDING order; use +column to sort in ASCENDING order
+  -v|--version			version
+  -V|--verbose			Enable the TCP state field
+  -w|--wide		output report in wide format (single row for both SRC and DST)
 
 Examples:
-  nftop -o wwan0    - only output connections that egress interface "wwan0"
-  nftop -t 1000000  - only output connections that are at least 1Mbps (sum)
-  nftop -i vlan+    - only output connections that match ingress interface "vlan*"
-  nftop -s +id      - sort output by ID column in ASCENDING order
+  nftop -o wwan0	- only output connections that egress interface "wwan0"
+  nftop -t 1000000	- only output connections that are at least 1Mbps (sum)
+  nftop -i vlan+	- only output connections that match ingress interface "vlan*"
+  nftop -s +id		- sort output by ID column in ASCENDING order
 
 Notes:
   The reporting of the in/out interface is derived via comparison of the connection source/destination address against the addresses

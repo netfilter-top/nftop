@@ -1,5 +1,10 @@
+nftop (1.1.1-1) STABLE; urgency=low
+
+  * First stable release.
+
+ -- NFTOP <code@nftop.org>  Wed, 21 Sep 2023 17:53:11 -0500
 nftop (1.0.2-1) UNRELEASED; urgency=low
 
   * Initial release.
 
- -- Kyle Huff <code@curetheitch.com>  Wed, 30 Aug 2023 18:21:47 -0500
+ -- NFTOP <code@nftop.org>  Wed, 30 Aug 2023 18:21:47 -0500

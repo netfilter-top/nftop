@@ -10,7 +10,7 @@
 #define _NFTOP_H
 #define _GNU_SOURCE
 
-#define VERSION "1.0.2"
+#define VERSION "1.1.1"
 
 #include <libnetfilter_conntrack/libnetfilter_conntrack.h>
 #include <linux/netfilter/nf_conntrack_tcp.h>

@@ -308,8 +308,6 @@ void enumerateNetworkDevices(struct Interface **interfaces) {
         exit(1);
     }
 
-    // struct Interface *interfaces = NULL;
-
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
         if (ifa->ifa_addr == NULL) {
             continue;
@@ -350,18 +348,6 @@ void enumerateNetworkDevices(struct Interface **interfaces) {
     }
 
     freeifaddrs(ifaddr);
-}
-
-static int subnet_match(int family,  const void *address1, const void *address2, const void *netmask) {
-    int bytes = (family == AF_INET) ? 4 : 16;
-
-    for (int i = 0; i < bytes; i++) {
-        if ((((const unsigned char *)address1)[i] & ((const unsigned char *)netmask)[i]) !=
-                (((const unsigned char *)address2)[i] & ((const unsigned char *)netmask)[i])) {
-            return 1;
-        }
-    }
-    return 0;
 }
 
 bool isLocalAddress(char *addr, struct Interface **devices_list) {

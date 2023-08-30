@@ -18,10 +18,10 @@ The support for ncurses is incomplete, but should be usable, but it doesn't buy 
 `nftop` is only useful if netfilter connection tracking and accounting is enabled. Furthermore, the age/timestamp field is only available if `net.netfilter.nf_conntrack_timestamp` is enabled.
 
 example setup for usage:
-```
+  ```
   sysctl -w net.netfilter.nf_conntrack_acct=1
   sysctl -w net.netfilter.nf_conntrack_timestamp=1
-```
+  ```
 
   If not already using stateful firewall rules, the following iptables rules will enable tracking for all ipv4 and ipv6 connections. This sets up a new chain that never gets used, but enables the `state` module. If you are using DNAT, SNAT or stateful firewall rules, you don't need this chain.
   ```

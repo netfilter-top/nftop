@@ -1,5 +1,5 @@
 CC		:= gcc
-CFLAGS	+= -Wall -Wextra -g -pedantic -O0
+CFLAGS	+= -Wall -Wextra -pedantic -O3
 
 BIN		:= bin
 SRC		:= src
@@ -7,6 +7,10 @@ INCLUDE	:= include
 LIB		:= lib
 
 LIBRARIES	:= -lnetfilter_conntrack
+
+ifeq ($(strip $(PREFIX)),)
+    PREFIX := /usr/local
+endif
 
 ifneq ($(strip $(NCURSES)),)
 CFLAGS      += -DENABLE_NCURSES

@@ -927,7 +927,7 @@ int main(int argc, char **argv) {
 
         // Copy interface names to the structure
         for (intf = if_nidxs; intf->if_index != 0 || intf->if_name != NULL; intf++) {
-            strncpy(devices_list[intf - if_nidxs].name, intf->if_name, IFNAMSIZ);
+            strncpy(devices_list[intf - if_nidxs].name, intf->if_name, IFNAMSIZ-1);
         }
 
         if_freenameindex(if_nidxs);

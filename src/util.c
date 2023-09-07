@@ -165,6 +165,15 @@ char *getIPProtocolName(uint8_t l3proto, uint8_t proto) {
         case IPPROTO_UDPLITE:
             proto_s = "udp";
             break;
+        case IPPROTO_IPV6:
+            proto_s = "ipv6";
+            break;
+        case 89:
+            proto_s = "ospf";
+            break;
+        case 112:
+            proto_s = "vrrp";
+            break;
         default:
             len = snprintf(NULL, 0, "%u", proto) + 1;
             proto_s = malloc(len+1);
@@ -491,14 +500,14 @@ void addr2host(struct Connection *ct_info) {
             if (!from_cache) {
                 resolved = getnameinfo((struct sockaddr *) &ipaddr, sizeof(struct sockaddr_in), hostname_src, sizeof(hostname_src), NULL, 0, NI_NAMEREQD);
                 if (resolved == 0) {
-                    strncpy(ct_info->local.hostname_src, hostname_src, sizeof(hostname_src));
+                    strncpy(ct_info->local.hostname_src, hostname_src, NFTOP_MAX_HOSTNAME-1);
                     add_dns_cache(ct_info->local.src, hostname_src);
                 } else {
                     add_dns_cache(ct_info->local.src, ct_info->local.src);
                 }
             } else {
                 strncpy(ct_info->local.hostname_src, from_cache, NFTOP_MAX_HOSTNAME-1);
-                ct_info->local.hostname_src[sizeof(from_cache)] = '\0';
+                ct_info->local.hostname_src[NFTOP_MAX_HOSTNAME] = '\0';
             }
         }
     }
@@ -513,14 +522,14 @@ void addr2host(struct Connection *ct_info) {
             if (!from_cache) {
                 resolved = getnameinfo((struct sockaddr *) &ipaddr, sizeof(struct sockaddr_in), hostname_dst, sizeof(hostname_dst), NULL, 0, NI_NAMEREQD);
                 if (resolved == 0) {
-                    strncpy(ct_info->local.hostname_dst, hostname_dst, sizeof(hostname_dst));
+                    strncpy(ct_info->local.hostname_dst, hostname_dst, NFTOP_MAX_HOSTNAME-1);
                     add_dns_cache(ct_info->local.dst, hostname_dst);
                 } else {
                     add_dns_cache(ct_info->local.dst, ct_info->local.dst);
                 }
             } else {
                 strncpy(ct_info->local.hostname_dst, from_cache, NFTOP_MAX_HOSTNAME-1);
-                ct_info->local.hostname_dst[sizeof(from_cache)] = '\0';
+                ct_info->local.hostname_dst[NFTOP_MAX_HOSTNAME] = '\0';
             }
         }
     }

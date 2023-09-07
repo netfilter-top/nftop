@@ -208,9 +208,9 @@ void displayHeader() {
                 displayWrite("%13s", pad);
 
             if (NFTOP_U_SI)
-                displayWrite("%59s", pad);
+                displayWrite("%76s", pad);
             else
-                displayWrite("%60s", pad);
+                displayWrite("%77s", pad);
         }
     } else {
         if (NFTOP_U_DISPLAY_ID)
@@ -224,9 +224,9 @@ void displayHeader() {
                 displayWrite("%13s", pad);
 
             if (NFTOP_U_SI)
-                displayWrite("%2s", pad);
+                displayWrite("%10s", pad);
             else
-                displayWrite("%3s", pad);
+                displayWrite("%11s", pad);
         }
     }
 
@@ -243,9 +243,9 @@ void displayHeader() {
         displayWrite("\n");
 
         if (NFTOP_U_DISPLAY_STATUS)
-            displayWrite("%63s", pad);
+            displayWrite("%70s", pad);
         else
-            displayWrite("%63s", pad);
+            displayWrite("%71s", pad);
 
         if (NFTOP_U_DISPLAY_ID)
             displayWrite("%11s", pad);
@@ -277,7 +277,7 @@ void displayHeader() {
             displayWrite("%s%1s%-13s", " DEV", getSortIndicator(NFTOP_SORT_IN), " ");
         }
         displayWrite("%-7s%1s", "PROTO", getSortIndicator(NFTOP_SORT_OUT));
-        displayWrite("%-32s", "SRC");
+        displayWrite("%-41s", "SRC");
     } else {
         displayWrite(" DEVICE %10s", pad);
         displayWrite(" ADDRESS %36s", pad);
@@ -299,7 +299,7 @@ void displayHeader() {
         displayWrite("%-13s", "STATUS ");
 
     if (NFTOP_U_REPORT_WIDE == 1 && !NFTOP_FLAGS_DEV_ONLY) {
-        displayWrite("%-33s", "DST");
+        displayWrite("%-41s", "DST");
         displayWrite("%s%1s%-1s", "DPORT", getSortIndicator(NFTOP_SORT_DPORT), " ");
     }
 
@@ -419,11 +419,11 @@ void displayCTInfo(struct Connection *ct_info) {
         }
 
         if (NFTOP_U_REPORT_WIDE)
-            displayWrite(" %-16s %-17s %-7s %-29s %7u ",
+            displayWrite(" %-16s %-17s %-7s %-38s %7u ",
                 ct_info->net_in_dev.name, ct_info->net_out_dev.name,
                 proto_name, (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src, ct_info->local.sport);
         else
-            displayWrite(" %-16s %-6s %-30s %6u ",
+            displayWrite(" %-16s %-6s %-38s %6u ",
                 ct_info->net_in_dev.name,
                 proto_name, (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src, ct_info->local.sport);
 
@@ -431,7 +431,7 @@ void displayCTInfo(struct Connection *ct_info) {
             displayWrite("[%-10s] ", ct_info->status_str);
 
         if (NFTOP_U_REPORT_WIDE)
-            displayWrite("%-30s %7u", (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
+            displayWrite("%-38s %7u", (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
 
         if (NFTOP_U_REPORT_WIDE && max_x < 80) {
             displayWrite("\n%-90s", pad);
@@ -475,7 +475,7 @@ void displayCTInfo(struct Connection *ct_info) {
                 displayWrite("%11s", pad);
 
             displayWrite("  -> %-14s",  ct_info->net_out_dev.name);
-            displayWrite("%6s%-30s %6u", pad, (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
+            displayWrite("%6s%-38s %6u", pad, (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
             if (NFTOP_U_DISPLAY_STATUS) {
                 displayWrite("%13s", pad);
             }

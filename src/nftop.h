@@ -94,17 +94,16 @@ extern int     NFTOP_FLAGS_PAUSE;
 extern int     NFTOP_FLAGS_DEV_ONLY;
 extern int     NFTOP_FLAGS_COLUMNS;
 
-// Global counters
+// Global counters/objects
 extern uint64_t NFTOP_RX_ALL;
 extern uint64_t NFTOP_TX_ALL;
 extern int NFTOP_CT_COUNT;
 extern int NFTOP_CT_ITER;
 extern int NFTOP_DNS_ITER;
+extern int NFTOP_MAX_HOSTNAME;
 extern struct DNSCache *dns_cache_head;
 extern struct DNSCache *dns_cache;
 
-// Global limits
-#define NFTOP_MAX_HOSTNAME 30
 
 #ifdef ENABLE_NCURSES
 extern SCREEN *screen;
@@ -154,6 +153,7 @@ struct Connection {
     uint32_t status_l4;
     bool is_src_nat;
     bool is_dst_nat;
+    uint32_t mark;
     struct Connection *next;
 };
 

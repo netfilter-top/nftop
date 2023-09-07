@@ -108,6 +108,7 @@ uint64_t NFTOP_RX_ALL = 0;
 int NFTOP_CT_COUNT = 0;
 int NFTOP_CT_ITER = 0;
 int NFTOP_DNS_ITER = 0;
+int NFTOP_MAX_HOSTNAME = 30;
 struct DNSCache *dns_cache;
 struct DNSCache *dns_cache_head;
 
@@ -162,14 +163,15 @@ static int data_cb(enum nf_conntrack_msg_type type,
             new_ct->status_l4 = nfct_get_attr_u8(ct, ATTR_TCP_STATE);
             break;
         case IPPROTO_UDP:
-            break;
         case IPPROTO_ICMP:
         case IPPROTO_ICMPV6:
-            break;
         case IPPROTO_IGMP:
+        case IPPROTO_IPV6:
+        case 89:    // OSPF
+        case 112:   // VRRP
             break;
         default:
-            printf("unknown l4proto (%d); discarding.\n", l4proto);
+            fprintf(stderr, "unknown l4proto (%d); discarding.\n", l4proto);
             return MNL_CB_OK;
     }
 
@@ -209,9 +211,11 @@ static int data_cb(enum nf_conntrack_msg_type type,
     new_ct->proto_l3 = nfct_get_attr_u8(ct, ATTR_L3PROTO);
     new_ct->proto_l4 = nfct_get_attr_u8(ct, ATTR_L4PROTO);
 
+    new_ct->mark = nfct_get_attr_u32(ct, ATTR_MARK);
+
     // TODO: probably better to use nfct_get_attr_grp and acquire ATTR_{ORIG,REPL}_{SRC,DST} to be protocol agnostic
     if (new_ct->proto_l3 == AF_INET) {
-        inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_ORIG_IPV4_SRC), new_ct->local.src, sizeof(new_ct->local.src));       
+        inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_ORIG_IPV4_SRC), new_ct->local.src, sizeof(new_ct->local.src));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_ORIG_IPV4_DST), new_ct->local.dst, sizeof(new_ct->local.dst));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_REPL_IPV4_SRC), new_ct->remote.src, sizeof(new_ct->remote.src));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_REPL_IPV4_DST), new_ct->remote.dst, sizeof(new_ct->remote.dst));
@@ -255,7 +259,7 @@ int queryNFCT(struct Connection* curr_ct) {
 
     if (ret == -1) {
         displayClose();
-        printf("error: (%d)(%s)\n", ret, strerror(errno));
+        fprintf(stderr, "error: (%d)(%s)\n", ret, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
@@ -746,7 +750,7 @@ int main(int argc, char **argv) {
                 break;
             case 'a':
                 if (isalpha(*optarg) || atoi(optarg) > 2) {
-                    printf("Option -%c requires a numeric value of 0, 1 or 2\n", c);
+                    fprintf(stderr, "Option -%c requires a numeric value of 0, 1 or 2\n", c);
                     exit(EXIT_FAILURE);
                 }
                 NFTOP_U_DISPLAY_AGE = atoi(optarg);
@@ -765,20 +769,19 @@ int main(int argc, char **argv) {
                 break;
             case 't':
                 if (isalpha(*optarg)) {
-                    printf("Option -t requires a number from -1 to %lu\n", (int64_t)~0);
+                    fprintf(stderr, "Option -t requires a number from -1 to %lu\n", (int64_t)~0);
                     exit(EXIT_FAILURE);
                 }
                 NFTOP_U_THRESH = atoll(optarg);
                 break;
             case 'u':
                 if (isalpha(*optarg) || atoi(optarg) < 1) {
-                    printf("Option -%c requires a number\n", optopt);
+                    fprintf(stderr, "Option -%c requires a number\n", optopt);
                     exit(EXIT_FAILURE);
                 }
                 NFTOP_U_INTERVAL = atoi(optarg);
                 break;
             case 'i':
-                printf("parsing option i (%s)\n", optarg);
                 NFTOP_U_IN_IFACE = optarg;
                 if (strlen(optarg) > 1) {
                     char *opt_tail = &optarg[strlen(optarg)-1];
@@ -835,7 +838,7 @@ int main(int argc, char **argv) {
                 } else if (strcmp(optarg, "proto") == 0) {
                     NFTOP_U_SORT_FIELD = NFTOP_SORT_PROTO;
                 } else {
-                    printf("Option -s|--sort column must be one of [+]id [+]in [+]out [+]sport [+]dport [+]rx [+]tx [+]sum [+]age [+]proto\n");
+                    fprintf(stderr, "Option -s|--sort column must be one of [+]id [+]in [+]out [+]sport [+]dport [+]rx [+]tx [+]sum [+]age [+]proto\n");
                     exit(EXIT_FAILURE);
                 }
                 break;
@@ -1097,7 +1100,7 @@ int main(int argc, char **argv) {
                         match = false;
                     }
 
-                    if (NFTOP_U_DNS && (strlen(curr_ct->local.hostname_src) < 2 || strlen(curr_ct->local.hostname_dst) < 2)) {
+                    if (NFTOP_U_DNS && (strlen(curr_ct->local.hostname_src) < 1 || strlen(curr_ct->local.hostname_dst) < 1)) {
                         addr2host(curr_ct);
                     }
 

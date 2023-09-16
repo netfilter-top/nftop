@@ -32,9 +32,10 @@ example setup for usage:
   ip6tables -t filter -A TRACKING -m state --state NEW,RELATED,ESTABLISHED,INVALID -j RETURN
   ```
 
-## Build requirements
-libc6-dev
-libnetfilter-conntrack
+  If you are doing policy routing via marks, the mark needs to be exported to the connection tracking mark (`CONNMARK`). The following example exports the skb mark to the connection tracking mark, but this will need to be after setting the mark. Just an example.
+  ```
+  iptables -t mangle -A PREROUTING -j CONNMARK --save-mark
+  ```
 
 ## Usage
 ```
@@ -75,8 +76,8 @@ Examples:
   nftop -s +id		- sort output by ID column in ASCENDING order
 
 Notes:
-  The reporting of the in/out interface is derived via comparison of the connection source/destination address against the addresses
-  of configured interfaces. This could result in false reporting in certain cases (e.g.: policy routing, traffic queues, etc.)
+  The reporting of the in/out interface is derived via a route lookup of the connection source/destination address(es) and marks,
+  This could result in false reporting in certain cases (e.g.: not using `CONNMARK`, source/dest port policy routing, multi-path, traffic queues, etc.)
 
 Requirements:
   netfilter connection tracking
@@ -88,4 +89,4 @@ Requirements:
 ## Build dependencies
   * libmnl-dev
   * libnetfilter-conntrack-dev
-  * libncurses-dev (if ncurses enabled in build)
+  * libncurses-dev (if ncurses enabled)

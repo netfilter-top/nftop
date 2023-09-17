@@ -9,7 +9,15 @@
 #ifndef _NFTOP_UTIL_H
 #define _NFTOP_UTIL_H
 #define _GNU_SOURCE
-#include <netdb.h>  // NI_NAMEREQD
+#include <stdarg.h>
+
+#define DLOG(loglevel, f_, ...)    do {         \
+    if (loglevel > 0) {\
+        fprintf(stderr, "DEBUG %s:%d:%s: ", __FILENAME__, __LINE__, __func__); \
+        fprintf(stderr, (f_), ##__VA_ARGS__);  \
+    }\
+} while (0)
+
 
 struct Address {
     char ip[INET6_ADDRSTRLEN];

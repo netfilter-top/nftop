@@ -9,6 +9,7 @@
 #ifndef _NFTOP_H
 #define _NFTOP_H
 #define _GNU_SOURCE
+
 #define VERSION "1.0.2"
 
 #include <libnetfilter_conntrack/libnetfilter_conntrack.h>
@@ -16,7 +17,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <netdb.h>
+#include <netdb.h>  // NI_NAMEREQD, NI_MAXHOST, NI_MAXSERV
+
 
 #ifdef ENABLE_NCURSES
 #include <ncurses.h>
@@ -82,6 +84,7 @@ extern int     NFTOP_U_REDACT_SRC;
 extern int     NFTOP_U_REDACT_DST;
 extern int     NFTOP_U_NUMERIC_SRC;
 extern int     NFTOP_U_NUMERIC_DST;
+extern int     NFTOP_U_NUMERIC_PORT;
 extern int     NFTOP_U_BPS;
 extern int     NFTOP_U_CONTINUOUS;
 
@@ -93,6 +96,7 @@ extern int     NFTOP_U_MACHINE;
 extern int     NFTOP_FLAGS_PAUSE;
 extern int     NFTOP_FLAGS_DEV_ONLY;
 extern int     NFTOP_FLAGS_COLUMNS;
+extern int     NFTOP_FLAGS_DEBUG;
 
 // Global counters/objects
 extern uint64_t NFTOP_RX_ALL;
@@ -100,7 +104,8 @@ extern uint64_t NFTOP_TX_ALL;
 extern int NFTOP_CT_COUNT;
 extern int NFTOP_CT_ITER;
 extern int NFTOP_DNS_ITER;
-extern int NFTOP_MAX_HOSTNAME;
+extern size_t NFTOP_MAX_HOSTNAME;
+extern int NFTOP_MAX_SERVICE;
 extern struct DNSCache *dns_cache_head;
 extern struct DNSCache *dns_cache;
 
@@ -113,12 +118,16 @@ extern struct winsize w;
 #endif
 
 struct Network {
-	char src[INET6_ADDRSTRLEN];
+    char src[INET6_ADDRSTRLEN];
     uint16_t sport;
-	char dst[INET6_ADDRSTRLEN];
+    char sport_str[NI_MAXSERV];
+    char dst[INET6_ADDRSTRLEN];
     uint16_t dport;
+    char dport_str[NI_MAXSERV];
     char hostname_src[NI_MAXHOST];
     char hostname_dst[NI_MAXHOST];
+    struct sockaddr_storage src_ip;
+    struct sockaddr_storage dst_ip;
 };
 
 struct Interface {

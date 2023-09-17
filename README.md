@@ -49,7 +49,7 @@ nftop [-46dbnNPrRS] [-a age_format] [-i in interface] [-o out interface] [-s sor
   -B|--bps				output the connection/interface only in bits-per-second, without scaling to Kbps, Mpbs, etc.
   -c|--continuous		output continously without display header or performing screen refresh
   -I|--id				output connection tracking ID
-  -L|--loopback			include connections on loopback interfaces (IFF_LOOPBACK)
+  -l|--loopback			include connections on loopback interfaces (IFF_LOOPBACK)
   -n|--numeric-local	numeric local IP address
   -N|--numeric-remote	numeric remote IP address
   -M|--machine			output continuously without header and do not scale the unit (bps/Bps only) (-c and -B)

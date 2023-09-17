@@ -70,7 +70,7 @@ Requirements:\n\
 int     NFTOP_U_INTERVAL 		= 2;				// time between updates in seconds
 int     NFTOP_U_DISPLAY_AGE 	= 0; 				// 0 = no display, 1 = numeric (seconds), 2 = string (i.e.: 1d 14h 18m 24s)
 int     NFTOP_U_DISPLAY_STATUS  = 0;                // enable display of the status field (CONFIRMED, ASSURED, CLOSING, etc.)
-int     NFTOP_U_SI 		    	= 0;				// use Standards International format (default: false)
+int     NFTOP_U_SI 		    	= 1;				// use Standards International format (default: true)
 int     NFTOP_U_BYTES 	    	= 0;				// use Bytes format (default: false)
 int64_t NFTOP_U_THRESH	  		= 1;				// minimum threshold of throughput to display (-1 for all connections)
 char*	NFTOP_U_IN_IFACE		= NULL;				// ingress interface filter
@@ -89,6 +89,7 @@ int     NFTOP_U_REDACT_SRC      = 0;                // obfuscation/redaction of 
 int     NFTOP_U_REDACT_DST      = 0;                // obfuscation/redaction of DEST field
 int     NFTOP_U_NUMERIC_SRC     = 0;                // numeric/non-dns display of the SRC field
 int     NFTOP_U_NUMERIC_DST     = 0;                // numeric/non-dns display of the DEST field
+int     NFTOP_U_NUMERIC_PORT    = 0;                // numeric/non-dns display of the SPORT and DPORT fields
 int     NFTOP_U_BPS             = 0;                // use bps only (no scaling of units)
 int     NFTOP_U_CONTINUOUS      = 0;                // output continously without displaying header or screen reset
 int     NFTOP_U_MACHINE         = 0;                // enables -c, -B and -w
@@ -98,6 +99,7 @@ int		NFTOP_FLAGS_TIMESTAMP	= 1;				// flag for conntrack_timestamp detection
 int     NFTOP_FLAGS_EXIT        = 0;                // stop application, cleanup/free/etc
 int     NFTOP_FLAGS_PAUSE       = 0;                // display is paused
 int     NFTOP_FLAGS_DEV_ONLY    = 0;                // display device list only (with bandwidth reporting)
+int     NFTOP_FLAGS_DEBUG       = 0;                // output debug information to stderr
 
 // global size values
 int     NFTOP_DISPLAY_COUNT     = 1024;             // maximum lines of connections to display
@@ -108,7 +110,8 @@ uint64_t NFTOP_RX_ALL = 0;
 int NFTOP_CT_COUNT = 0;
 int NFTOP_CT_ITER = 0;
 int NFTOP_DNS_ITER = 0;
-int NFTOP_MAX_HOSTNAME = 30;
+size_t NFTOP_MAX_HOSTNAME = 42;
+int NFTOP_MAX_SERVICE = 7;
 struct DNSCache *dns_cache;
 struct DNSCache *dns_cache_head;
 
@@ -171,7 +174,7 @@ static int data_cb(enum nf_conntrack_msg_type type,
         case 112:   // VRRP
             break;
         default:
-            fprintf(stderr, "unknown l4proto (%d); discarding.\n", l4proto);
+            DLOG(NFTOP_FLAGS_DEBUG, "unknown l4proto (%d); discarding.\n", l4proto);
             return MNL_CB_OK;
     }
 
@@ -236,6 +239,22 @@ static int data_cb(enum nf_conntrack_msg_type type,
 
     new_ct->local.sport = ntohl(nfct_get_attr_u32(ct, ATTR_REPL_PORT_SRC));
     new_ct->local.dport = ntohl(nfct_get_attr_u32(ct, ATTR_ORIG_PORT_SRC));
+
+    if (NFTOP_U_DNS && !NFTOP_U_NUMERIC_PORT) {
+        struct servent *service;
+        char *proto4 = getIPProtocolName(new_ct->proto_l3, new_ct->proto_l4);
+        proto4[3] = '\0'; // truncate any protocol version; i.e. "udp6"->"udp"
+        service = getservbyport(htons(new_ct->local.sport), proto4);
+        if (service != NULL) {
+            snprintf(new_ct->local.sport_str, NFTOP_MAX_SERVICE, "%s", service->s_name);
+        }
+
+        service = getservbyport(htons(new_ct->local.dport), proto4);
+        if (service != NULL) {
+            snprintf(new_ct->local.dport_str, NFTOP_MAX_SERVICE, "%s", service->s_name);
+        }
+        free(proto4);
+    }
 
     new_ct->status = nfct_get_attr_u32(ct, ATTR_STATUS);
 
@@ -536,7 +555,7 @@ int wait_char(int t) {
     int usec_div = 50000;
 
     while (i < (t * (USEC_PER_SEC/usec_div)) && !NFTOP_FLAGS_EXIT) {
-        if (!is_redirected() || NFTOP_U_MACHINE) {
+        if (!is_redirected()) {
 #ifdef ENABLE_NCURSES
             c = wgetch(w);
 #else
@@ -556,8 +575,10 @@ int wait_char(int t) {
                             displayHeader();
                             break;
 #else
-                            displayWrite("\033[0;0H");
-                            displayHeader();
+                            if (!NFTOP_U_CONTINUOUS) {
+                                displayWrite("\033[0;0H"); // move to x, y: 0, 0
+                                displayHeader();
+                            }
                             return 2;
 #endif
 
@@ -636,6 +657,9 @@ int wait_char(int t) {
                         return 0;
                     case 'l':
                         NFTOP_U_NO_LOOPBACK = NFTOP_U_NO_LOOPBACK ? 0 : 1;
+                        return 0;
+                    case 'x':
+                        NFTOP_U_NUMERIC_PORT = NFTOP_U_NUMERIC_PORT ? 0 : 1;
                         return 0;
                     case '0':
                         NFTOP_U_IPV4 = 1;
@@ -725,7 +749,9 @@ int main(int argc, char **argv) {
         {"help",			no_argument,	   0, 'h'},
         {"numeric-local",	no_argument, 	   0, 'n'}, // numeric local IP
         {"numeric-remote",  no_argument, 	   0, 'N'}, // numeric remote IP
+        {"disable-dns",     no_argument,       0, 'x'}, // disable dns resolution of both local and dest IPs and s/dports
         {"dev",             no_argument,       0, 'd'}, // devices only
+        {"debug",           no_argument,       0, 'D'}, // output debug information to stderr
         {"numeric-port", 	no_argument,       0, 'P'}, // numeric port
         {"redact-local", 	no_argument,       0, 'r'}, // replace the local address/hostname with "REDACTED"
         {"redact-remote", 	no_argument,       0, 'R'}, // replace the destination address/hostname with "REDACTED"
@@ -739,7 +765,7 @@ int main(int argc, char **argv) {
         {"in",				required_argument, 0, 'i'}, // input interface to filter on
         {"out",				required_argument, 0, 'o'}, // output interface to filter on
         {"sort",			required_argument, 0, 's'}, // sort column
-        {"loopback",		required_argument, 0, 'L'}, // include connections on loopback interfaces
+        {"loopback",		required_argument, 0, 'l'}, // include connections on loopback interfaces
         {"wide",    		required_argument, 0, 'w'}, // format output in wide report format
         {"verbose",    		no_argument,       0, 'V'}, // include TCP connection state [assured, closed, etc]
         {"version",    		no_argument,       0, 'v'}, // version
@@ -748,13 +774,16 @@ int main(int argc, char **argv) {
         {0, 0, 0, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "46bBcdhILnNmprRSwvVa:s:t:u:i:o:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "46bBcdDhIlnNmprRSwvVa:s:t:u:i:o:", long_options, &option_index)) != -1) {
         switch (c) {
             case 'h':
                 printf(USAGE_STRING);
                 exit(EXIT_SUCCESS);
             case 'd':
                 NFTOP_FLAGS_DEV_ONLY = 1;
+                break;
+            case 'D':
+                NFTOP_FLAGS_DEBUG = 1;
                 break;
             case 'a':
                 if (isalpha(*optarg) || atoi(optarg) > 2) {
@@ -807,6 +836,11 @@ int main(int argc, char **argv) {
                 break;
             case 'N':
                 NFTOP_U_NUMERIC_DST = NFTOP_U_NUMERIC_DST ? 0 : 1;
+                break;
+            case 'x':
+                NFTOP_U_NUMERIC_SRC = 1;
+                NFTOP_U_NUMERIC_DST = 1;
+                NFTOP_U_NUMERIC_PORT = 1;
                 break;
             case 'o':
                 if (strlen(optarg) > 1) {
@@ -991,7 +1025,7 @@ int main(int argc, char **argv) {
                                     // use bytes_repl as bps_tx
                                     curr_ct->bps_tx = ((curr_ct->bytes_repl - hist_ct->bytes_repl) / delta_delta) * 8;
                                 } else {
-                                    curr_ct->bps_rx = ((curr_ct->bytes_repl - hist_ct->bytes_repl) / delta_delta) * 8;    
+                                    curr_ct->bps_rx = ((curr_ct->bytes_repl - hist_ct->bytes_repl) / delta_delta) * 8;
                                 }
                             }
                             if (curr_ct->bytes_orig - hist_ct->bytes_orig > 0) {
@@ -1004,13 +1038,13 @@ int main(int argc, char **argv) {
                             curr_ct->bps_sum = curr_ct->bps_rx + curr_ct->bps_tx;
                         }
 
-                        // copy over the hostnames if already resolved so we don't need to hit the dns_cache
-                        if (strlen(hist_ct->local.hostname_src) > 0) {
-                            memcpy(&curr_ct->local.hostname_src, hist_ct->local.hostname_src, sizeof(hist_ct->local.hostname_src));
-                        }
-                        if (strlen(hist_ct->local.hostname_dst) > 0) {
-                            memcpy(&curr_ct->local.hostname_dst, hist_ct->local.hostname_dst, sizeof(hist_ct->local.hostname_dst));
-                        }
+                        // // copy over the hostnames if already resolved so we don't need to hit the dns_cache
+                        // if (strlen(hist_ct->local.hostname_src) > 0) {
+                        //     memcpy(&curr_ct->local.hostname_src, hist_ct->local.hostname_src, sizeof(hist_ct->local.hostname_src));
+                        // }
+                        // if (strlen(hist_ct->local.hostname_dst) > 0) {
+                        //     memcpy(&curr_ct->local.hostname_dst, hist_ct->local.hostname_dst, sizeof(hist_ct->local.hostname_dst));
+                        // }
 
                         // Moved below to only show total ct entries that match the filter.
                         // TODO: add a NFTOP_{RX,TX}_MATCH and allow the user to toggle.
@@ -1147,7 +1181,7 @@ int main(int argc, char **argv) {
         }
 
         // if IO is not being redirected (i.e. via grep, tee, etc.), display the header
-        if (!is_redirected()) {
+        if (!is_redirected() && !NFTOP_U_CONTINUOUS) {
             displayHeader();
         }
 
@@ -1170,7 +1204,7 @@ int main(int argc, char **argv) {
                 NFTOP_FLAGS_PAUSE = 1;
                 pause = 0;
             }
-            else if (pause == 2) {
+            else if (pause == 2) { // we need to remain paused, but display the array
                 NFTOP_FLAGS_PAUSE = 1;
                 pause = 0;
                 if (!NFTOP_FLAGS_DEV_ONLY) {

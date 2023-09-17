@@ -7,7 +7,6 @@
  * (at your option) any later version.
  */
 #include <stdlib.h>
-#include <stdarg.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -58,7 +57,7 @@ void displayWrite(const char *fmt, ...) {
 
 void displayInit() {
 
-    if (is_redirected() && !NFTOP_U_MACHINE) {
+    if (is_redirected()) {
         setvbuf(stdout, NULL, _IONBF, 0);
     } else {
 #ifdef ENABLE_NCURSES
@@ -84,11 +83,13 @@ void displayInit() {
         curs_set(0);
 #else
     displayWrite("\033[?25l"); // hide cursor
+    if (!NFTOP_U_CONTINUOUS) {
+        displayWrite("\033[?1049h"); // create new screen (tput smcup)
+        displayWrite("\033[?7l"); // disable line-wrapping
+    }
     set_conio_terminal_mode();
 #endif
     }
-
-    // return s;
 }
 
 void displayClose() {
@@ -98,10 +99,10 @@ void displayClose() {
     delscreen(0);
 #endif
     if (!is_redirected()) {
-        displayWrite("\033[0H\033[J\033[?25h"); // clear screen and restore cursor
-    } else if (NFTOP_U_MACHINE) {
-        displayWrite("\n\033[?25h"); // restore cursor
+        displayWrite("\033[?1049l"); // restore screen (tput rmcup)
     }
+    displayWrite("\033[?7h"); // enable line-wrapping
+    displayWrite("\033[?25h"); // restore cursor
     fflush(stdout);
 }
 
@@ -113,7 +114,7 @@ void displayClear() {
         fflush(stdout);
     }
 #else
-    if (!is_redirected()) {
+    if (!is_redirected() && ! NFTOP_U_CONTINUOUS) {
         printf("\033[1;1H\033[2J");  	// clear screen
         printf("\033[39m\033[49m");     // reset fg/bg color
     }
@@ -123,7 +124,7 @@ void displayClear() {
 
 void displayRefresh() {
 #ifndef ENABLE_NCURSES
-    if (!is_redirected()) {
+    if (!is_redirected() && !NFTOP_U_CONTINUOUS) {
         printf("\033[0;30;40m\033[K");
         printf("\033[0m");
     }
@@ -158,6 +159,27 @@ void displayHeader() {
 
     getwinsize(w, &max_y, &max_x);
 
+    if (max_x % 2 == 1) { // coerce max_x to an even number
+        max_x--;
+    }
+
+    if (NFTOP_U_REPORT_WIDE) {
+        NFTOP_MAX_HOSTNAME = max_x - 99;
+    } else {
+        NFTOP_MAX_HOSTNAME = max_x - 64;
+    }
+
+    if (NFTOP_U_DISPLAY_ID)
+        NFTOP_MAX_HOSTNAME -= 11;
+    if (NFTOP_U_DISPLAY_STATUS)
+        NFTOP_MAX_HOSTNAME -= 13;
+
+    if (NFTOP_U_DISPLAY_AGE != 0)
+        NFTOP_MAX_HOSTNAME -= (NFTOP_U_REPORT_WIDE ? 9 : 19);
+
+    if (NFTOP_MAX_HOSTNAME < 10)
+        NFTOP_MAX_HOSTNAME = 10;
+
     rx_all_s = formatUOM(NFTOP_RX_ALL);
     tx_all_s = formatUOM(NFTOP_TX_ALL);
     sum_all_s = formatUOM(NFTOP_TX_ALL + NFTOP_RX_ALL);
@@ -188,7 +210,7 @@ void displayHeader() {
     if (NFTOP_U_SI)
         uom = "| SI  ";
     else
-        uom = "";
+        uom = "| IEC ";
 
     displayWrite("%-9s", run_status);
     displayWrite("| %03ds ", NFTOP_U_INTERVAL);
@@ -196,56 +218,39 @@ void displayHeader() {
     displayWrite("%-5s", l3enabled);
     displayWrite("%-5s", uom);
 
-    if ((NFTOP_U_REPORT_WIDE == 1 && max_x > 150) || NFTOP_FLAGS_DEV_ONLY) {
-        if (NFTOP_U_DISPLAY_ID && !NFTOP_FLAGS_DEV_ONLY)
-            displayWrite("%11s", pad);
-
-        if (NFTOP_FLAGS_DEV_ONLY) {
-            if (!NFTOP_U_SI)
-                displayWrite("%1s", pad);
-        } else {
-            if (NFTOP_U_DISPLAY_STATUS)
-                displayWrite("%13s", pad);
-
-            if (NFTOP_U_SI)
-                displayWrite("%76s", pad);
-            else
-                displayWrite("%77s", pad);
-        }
-    } else {
+    if (!NFTOP_FLAGS_DEV_ONLY) {
         if (NFTOP_U_DISPLAY_ID)
-            displayWrite("%11s", pad);
-
-        if (NFTOP_FLAGS_DEV_ONLY) {
-            if (!NFTOP_U_SI)
-                displayWrite("%1s", pad);
-        } else {
-            if (NFTOP_U_DISPLAY_STATUS)
-                displayWrite("%13s", pad);
-
-            if (NFTOP_U_SI)
-                displayWrite("%10s", pad);
-            else
-                displayWrite("%11s", pad);
-        }
+            displayWrite("%*s", (NFTOP_U_REPORT_WIDE ? 11 : 11), pad);
+        if (NFTOP_U_DISPLAY_STATUS)
+            displayWrite("%*s", (NFTOP_U_REPORT_WIDE ? 13 : 13), pad);
     }
 
-    if (NFTOP_U_REPORT_WIDE == 1 || NFTOP_FLAGS_DEV_ONLY) {
+    if (NFTOP_U_REPORT_WIDE || NFTOP_FLAGS_DEV_ONLY) {
+        if (NFTOP_U_DISPLAY_AGE == 0) {
+            displayWrite("%*s", (NFTOP_MAX_HOSTNAME - 3), pad);
+        } else {
+            displayWrite("%*s", (NFTOP_MAX_HOSTNAME - 14), pad);
+        }
+
+        NFTOP_MAX_HOSTNAME = (NFTOP_MAX_HOSTNAME - 4) / 2;
+
+        if (NFTOP_U_DISPLAY_AGE != 0)
+            NFTOP_MAX_HOSTNAME -= 6;
+
         displayWrite("%12s ", tx_all_s);
         displayWrite("%12s ", rx_all_s);
         displayWrite("%13s", sum_all_s);
     } else {
-        displayWrite("%12s ", tx_all_s);
-        if (max_x > 89) {
-            displayWrite("%13s", sum_all_s);
+        if (!NFTOP_FLAGS_DEV_ONLY) {
+            displayWrite("%*s", (NFTOP_MAX_HOSTNAME-25), pad);
         }
+
+        displayWrite("%12s ", tx_all_s);
+        displayWrite("%13s", sum_all_s);
 
         displayWrite("\n");
 
-        if (NFTOP_U_DISPLAY_STATUS)
-            displayWrite("%70s", pad);
-        else
-            displayWrite("%71s", pad);
+        displayWrite("%*s", NFTOP_MAX_HOSTNAME+36, pad);
 
         if (NFTOP_U_DISPLAY_ID)
             displayWrite("%11s", pad);
@@ -272,19 +277,19 @@ void displayHeader() {
 
         if (NFTOP_U_REPORT_WIDE) {
             displayWrite("%s%1s%-14s", " IN", getSortIndicator(NFTOP_SORT_IN), " ");
-            displayWrite("%s%1s%-14s", "OUT", getSortIndicator(NFTOP_SORT_OUT), " ");
+            displayWrite("%s%1s%-13s", "OUT", getSortIndicator(NFTOP_SORT_OUT), " ");
         } else {
             displayWrite("%s%1s%-13s", " DEV", getSortIndicator(NFTOP_SORT_IN), " ");
         }
         displayWrite("%-7s%1s", "PROTO", getSortIndicator(NFTOP_SORT_OUT));
-        displayWrite("%-41s", "SRC");
+        displayWrite("%-*s", NFTOP_MAX_HOSTNAME+1, "SRC");
     } else {
         displayWrite(" DEVICE %10s", pad);
         displayWrite(" ADDRESS %36s", pad);
     }
 
     if (NFTOP_U_REPORT_WIDE == 1 && !NFTOP_FLAGS_DEV_ONLY) {
-        displayWrite("%s%1s", "SPORT", getSortIndicator(NFTOP_SORT_SPORT), " ");
+        displayWrite("   SPORT%1s", getSortIndicator(NFTOP_SORT_SPORT), " ");
     } else if (!NFTOP_FLAGS_DEV_ONLY) {
         char *sort;
         if (NFTOP_U_SORT_FIELD == NFTOP_SORT_DPORT) {
@@ -292,31 +297,28 @@ void displayHeader() {
         } else {
             sort = getSortIndicator(NFTOP_SORT_SPORT);
         }
-        displayWrite("%s%1s%-1s", " PORT", sort, " ");
+        displayWrite("    PORT%1s%-1s", sort, " ");
     }
 
     if (NFTOP_U_DISPLAY_STATUS && !NFTOP_FLAGS_DEV_ONLY)
         displayWrite("%-13s", "STATUS ");
 
     if (NFTOP_U_REPORT_WIDE == 1 && !NFTOP_FLAGS_DEV_ONLY) {
-        displayWrite("%-41s", "DST");
-        displayWrite("%s%1s%-1s", "DPORT", getSortIndicator(NFTOP_SORT_DPORT), " ");
+        displayWrite("%-*s", NFTOP_MAX_HOSTNAME+1, "DST");
+        displayWrite("   DPORT%1s%-1s", getSortIndicator(NFTOP_SORT_DPORT), " ");
     }
 
-    if (max_x > 80 || !NFTOP_U_REPORT_WIDE) {
-        if (NFTOP_U_REPORT_WIDE || NFTOP_FLAGS_DEV_ONLY) {
-            displayWrite("%s%1s%-10s", "TX", getSortIndicator(NFTOP_SORT_TX), " ");
-            displayWrite("%s%1s%-10s", "RX", getSortIndicator(NFTOP_SORT_RX), " ");
-        } else {
-            displayWrite("%s%1s%-7s", "TX/RX", getSortIndicator(NFTOP_SORT_RX), " ");
-        }
+    if (NFTOP_U_REPORT_WIDE || NFTOP_FLAGS_DEV_ONLY) {
+        displayWrite("%s%1s%-10s", "TX", getSortIndicator(NFTOP_SORT_TX), " ");
+        displayWrite("%s%1s%-10s", "RX", getSortIndicator(NFTOP_SORT_RX), " ");
+    } else {
+        displayWrite("%s%1s%-7s", "TX/RX", getSortIndicator(NFTOP_SORT_RX), " ");
     }
 
-    if (max_x > 89)
-        displayWrite("%s%1s%-9s", "SUM", getSortIndicator(NFTOP_SORT_SUM), " ");
+    displayWrite("%s%1s%-9s", "SUM", getSortIndicator(NFTOP_SORT_SUM), " ");
 
     if (NFTOP_U_DISPLAY_AGE > 0 && !NFTOP_FLAGS_DEV_ONLY)
-        displayWrite("%s%1s%-13s", "AGE", getSortIndicator(NFTOP_SORT_AGE), " ");
+        displayWrite("   %s%1s%-13s", "AGE", getSortIndicator(NFTOP_SORT_AGE), " ");
 
 #ifdef ENABLE_NCURSES
     wattroff(w, COLOR_PAIR(1));
@@ -416,33 +418,52 @@ void displayCTInfo(struct Connection *ct_info) {
                 strcpy(ct_info->local.hostname_dst, "REDACTED");
                 strcpy(ct_info->local.dst,           "REDACTED");
             }
+        } else {
+            // truncate the hostname_dst/src to NTOP_MAX_HOSTNAME
+            if (strlen(ct_info->local.hostname_src) > NFTOP_MAX_HOSTNAME)
+                ct_info->local.hostname_src[NFTOP_MAX_HOSTNAME] = '\0';
+            if (strlen(ct_info->local.hostname_dst) > NFTOP_MAX_HOSTNAME)
+                ct_info->local.hostname_dst[NFTOP_MAX_HOSTNAME] = '\0';
+            if (strlen(ct_info->local.src) > NFTOP_MAX_HOSTNAME)
+                ct_info->local.src[NFTOP_MAX_HOSTNAME] = '\0';
+            if (strlen(ct_info->local.dst) > NFTOP_MAX_HOSTNAME)
+                ct_info->local.dst[NFTOP_MAX_HOSTNAME] = '\0';
         }
 
-        if (NFTOP_U_REPORT_WIDE)
-            displayWrite(" %-16s %-17s %-7s %-38s %7u ",
+        if (NFTOP_U_REPORT_WIDE) {
+            displayWrite(" %-16s %-16s %-7s %-*s ",
                 ct_info->net_in_dev.name, ct_info->net_out_dev.name,
-                proto_name, (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src, ct_info->local.sport);
-        else
-            displayWrite(" %-16s %-6s %-38s %6u ",
+                proto_name, (NFTOP_MAX_HOSTNAME), (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src);
+                if (NFTOP_U_NUMERIC_PORT || strlen(ct_info->local.sport_str) < 1) {
+                    displayWrite("%8u ", ct_info->local.sport);
+                } else {
+                    displayWrite("%8s ", ct_info->local.sport_str);
+                }
+        } else {
+            displayWrite(" %-16s %-7s %-*s ",
                 ct_info->net_in_dev.name,
-                proto_name, (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src, ct_info->local.sport);
+                proto_name, (NFTOP_MAX_HOSTNAME), (*ct_info->local.hostname_src != '\0' && NFTOP_U_NUMERIC_SRC == 0) ? ct_info->local.hostname_src : ct_info->local.src);
+            if (NFTOP_U_NUMERIC_PORT || strlen(ct_info->local.sport_str) < 1) {
+                displayWrite("%8u ", ct_info->local.sport);
+            } else {
+                displayWrite("%8s ", ct_info->local.sport_str);
+            }
+        }
 
         if (NFTOP_U_DISPLAY_STATUS)
             displayWrite("[%-10s] ", ct_info->status_str);
 
-        if (NFTOP_U_REPORT_WIDE)
-            displayWrite("%-38s %7u", (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
-
-        if (NFTOP_U_REPORT_WIDE && max_x < 80) {
-            displayWrite("\n%-90s", pad);
+        if (NFTOP_U_REPORT_WIDE) {
+            displayWrite("%-*s ", (NFTOP_MAX_HOSTNAME), (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst);
+            if (NFTOP_U_NUMERIC_PORT || strlen(ct_info->local.dport_str) < 1) {
+                displayWrite("%8u ", ct_info->local.dport);
+            } else {
+                displayWrite("%8s ", ct_info->local.dport_str);
+            }
         }
 
         if (!NFTOP_U_REPORT_WIDE) {
-            if (max_x > 89) {
-                displayWrite("%12s [%12s]", tx_s, sum_s);
-            } else {
-                displayWrite("%12s", rx_s);
-            }
+            displayWrite("%12s [%12s]", tx_s, sum_s);
         } else {
             displayWrite("%12s %12s [%12s]", tx_s, rx_s, sum_s);
         }
@@ -475,7 +496,12 @@ void displayCTInfo(struct Connection *ct_info) {
                 displayWrite("%11s", pad);
 
             displayWrite("  -> %-14s",  ct_info->net_out_dev.name);
-            displayWrite("%6s%-38s %6u", pad, (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst, ct_info->local.dport);
+            displayWrite("%6s   -> %-*s ", pad, (NFTOP_MAX_HOSTNAME - 5), (*ct_info->local.hostname_dst != '\0' && NFTOP_U_NUMERIC_DST == 0) ? ct_info->local.hostname_dst : ct_info->local.dst);
+            if (NFTOP_U_NUMERIC_PORT || strlen(ct_info->local.dport_str) < 1) {
+                displayWrite("%8u", ct_info->local.dport);
+            } else {
+                displayWrite("%8s", ct_info->local.dport_str);
+            }
             if (NFTOP_U_DISPLAY_STATUS) {
                 displayWrite("%13s", pad);
             }
@@ -507,21 +533,29 @@ void displayDevices(struct Interface *devices_m) {
         sum_is = formatUOM(curr_dev->bps_sum);
 
         if (curr_dev->n_addresses < 2) {
-            displayWrite("%-16s %-43s %12s %12s %13s\n", curr_dev->name, NFTOP_U_REDACT_SRC ? "REDACTED" : curr_dev->addresses->ip, tx_is, rx_is, sum_is);
+            displayWrite("%-16s %-*s %12s %12s %13s\n", curr_dev->name, 43, NFTOP_U_REDACT_SRC ? "REDACTED" : curr_dev->addresses->ip, tx_is, rx_is, sum_is);
         } else {
-            displayWrite("%-60s %12s %12s %13s\n", curr_dev->name, tx_is, rx_is, sum_is);
+             if (NFTOP_U_CONTINUOUS || is_redirected()) {
+                displayWrite("%-16s %-*s %12s %12s %13s\n", curr_dev->name, 43, "0.0.0.0", tx_is, rx_is, sum_is);
+            } else {
+                displayWrite("%-60s %12s %12s %13s\n", curr_dev->name, tx_is, rx_is, sum_is);
+            }
 
             struct Address *addr = curr_dev->addresses;
             while (addr->ip != NULL) {
                 tx_as = formatUOM(addr->bps_tx);
                 rx_as = formatUOM(addr->bps_rx);
                 sum_as = formatUOM(addr->bps_sum);
-                displayWrite("%16s %-43s %12s %12s %13s\n", pad, NFTOP_U_REDACT_SRC ? "REDACTED" : addr->ip, tx_as, rx_as, sum_as);
+                if (NFTOP_U_CONTINUOUS || is_redirected()) {
+                    displayWrite("%-16s %-43s %12s %12s %13s\n", curr_dev->name, NFTOP_U_REDACT_SRC ? "REDACTED" : addr->ip, tx_as, rx_as, sum_as);
+                } else {
+                    displayWrite("%16s %-43s %12s %12s %13s\n", pad, NFTOP_U_REDACT_SRC ? "REDACTED" : addr->ip, tx_as, rx_as, sum_as);
+                }
                 free(tx_as);
                 free(rx_as);
                 free(sum_as);
                 addr = addr->next;
-            }            
+            }
         }
 
         free(tx_is);

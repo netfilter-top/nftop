@@ -12,16 +12,11 @@ int NFTOP_IFINDEX_OUTDEV = 0;
 int NFTOP_IFINDEX_PHYSINDEV = 0;
 int NFTOP_IFINDEX_PHYSOUTDEV = 0;
 
-/**
- * decide as early as possible if we should ignore this connection
- * 
- */
+
 static int cb(const struct nlmsghdr *nlh, enum nf_conntrack_msg_type type,
               struct nf_conntrack *ct,
               void *data)
 {
-    // ct = nfct_new();
-
 	if (ct == NULL)
 		return MNL_CB_OK;
 
@@ -49,23 +44,23 @@ static int cb(const struct nlmsghdr *nlh, enum nf_conntrack_msg_type type,
     name = if_indextoname(ifindex_in, in_ifname);
     if (name == NULL && errno == ENXIO) {
         // fprintf(stderr, "Index %d : No such device\n", ifindex_in);
-    } 
+    }
     errno = saved_errno;
     name = if_indextoname(ifindex_out, out_ifname);
     if (name == NULL && errno == ENXIO) {
         // fprintf(stderr, "Index %d : No such device\n", ifindex_out);
-    } 
+    }
     errno = saved_errno;
 
     name = if_indextoname(ifindex_phys_in, in_phys);
     if (name == NULL && errno == ENXIO) {
         // fprintf(stderr, "Index %d : No such device\n", ifindex_phys_in);
-    } 
+    }
     errno = saved_errno;
     name = if_indextoname(ifindex_phys_out, out_phys);
     if (name == NULL && errno == ENXIO) {
         // fprintf(stderr, "Index %d : No such device\n", ifindex_phys_out);
-    } 
+    }
     errno = saved_errno;
 
     printf("IFINDEX_IN: (%s) IFINDEX_OUT: (%s) IFINDEX_IN_DEV: %s IFINDEX_OUT_DEV: %s PROTO: %u\n", in_ifname, out_ifname, in_phys, out_phys, l4proto);

@@ -1,0 +1,14 @@
+Source: nftop
+Priority: optional
+Build-Depends: libnetfilter-conntrack3
+Maintainer: Kyle Huff
+
+Package: nftop
+Priority: extra
+Section: net
+Architecture: amd64
+Depends: libnetfilter-conntrack3
+Provides: nftop
+Description: display bandwidth utilization of nfconntrack connections 
+ nftop is a top-like utility to display bandwidth utilization, connection state, source/destination addresses/hostnames, protocol, port, connection age and in/out interface of netfilter connection-tracking entires. 
+ This utility is only viable when utilizing netfilter connection tracking (i.e. SNAT/DNAT/MASQ, or statfull firewall rules) with netfilter connection accounting enabled.

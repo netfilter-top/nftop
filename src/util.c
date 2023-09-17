@@ -95,7 +95,7 @@ char *formatUOM(uint64_t value) {
     }
 
 	if (NFTOP_U_BYTES == 1) {
-		if (NFTOP_U_SI == 1) {
+		if (NFTOP_U_SI == 0) { // IEC UOM
 			factor = 8.192;
 			suffix_unit2 = "iBps";
 		} else {
@@ -103,7 +103,7 @@ char *formatUOM(uint64_t value) {
 			suffix_unit2 = "Bps";
 		}
 	} else {
-		if (NFTOP_U_SI == 1) {
+		if (NFTOP_U_SI == 0) { // IEC UOM
 			factor = 1.024;
 			suffix_unit2 = "ibps";
 		} else {
@@ -416,6 +416,7 @@ void add_dns_cache(char *ip, char *hostname) {
                 exit(EXIT_FAILURE);
             }
             dns_cache_head = dns_cache_head->next;
+            memset(dns_cache_head, 0, sizeof(struct DNSCache));
             dns_cache_head->next = NULL;
         } else {
             dns_cache_head = dns_cache_head->next;
@@ -451,28 +452,42 @@ char *get_cached_dns(char *ip) {
 }
 
 void addr2host(struct Connection *ct_info) {
-    struct sockaddr_in ipaddr;
+    struct sockaddr_storage addr;
+    struct sockaddr *sa = (struct sockaddr *)&addr;
+    socklen_t sa_len = sizeof(addr);
+
+    memset(&addr, 0, sizeof(addr));
+
     char hostname_src[NI_MAXHOST], hostname_dst[NI_MAXHOST];
     char *from_cache;
     int resolved;
 
     if (!NFTOP_U_NUMERIC_SRC) {
         if (strlen(ct_info->local.hostname_src) < 1 && NFTOP_U_REDACT_SRC == 0) {
-            memset(&ipaddr, 0, sizeof(struct sockaddr_in));
-            ipaddr.sin_family = ct_info->proto_l3;
-            ipaddr.sin_port = htons(0);
-            inet_pton(AF_INET, ct_info->local.src, &ipaddr.sin_addr);
+            if (ct_info->proto_l3 == AF_INET) {
+                inet_pton(ct_info->proto_l3, ct_info->local.src, &((struct sockaddr_in *)sa)->sin_addr);
+
+                ((struct sockaddr_in *)sa)->sin_family = ct_info->proto_l3;
+                ((struct sockaddr_in *)sa)->sin_port = htons(0);
+            } else {
+                inet_pton(ct_info->proto_l3, ct_info->local.src, &((struct sockaddr_in6 *)sa)->sin6_addr);
+
+                ((struct sockaddr_in6 *)sa)->sin6_family = ct_info->proto_l3;
+                ((struct sockaddr_in6 *)sa)->sin6_port = htons(0);
+            }
+
             from_cache = get_cached_dns(ct_info->local.src);
+
             if (!from_cache) {
-                resolved = getnameinfo((struct sockaddr *) &ipaddr, sizeof(struct sockaddr_in), hostname_src, sizeof(hostname_src), NULL, 0, NI_NAMEREQD);
+                resolved = getnameinfo(sa, sa_len, hostname_src, sizeof(hostname_src), NULL, 0, NI_NAMEREQD);
                 if (resolved == 0) {
-                    strncpy(ct_info->local.hostname_src, hostname_src, NFTOP_MAX_HOSTNAME-1);
+                    strncpy(ct_info->local.hostname_src, hostname_src, NFTOP_MAX_HOSTNAME);
                     add_dns_cache(ct_info->local.src, hostname_src);
                 } else {
                     add_dns_cache(ct_info->local.src, ct_info->local.src);
                 }
             } else {
-                strncpy(ct_info->local.hostname_src, from_cache, NFTOP_MAX_HOSTNAME-1);
+                strncpy(ct_info->local.hostname_src, from_cache, NFTOP_MAX_HOSTNAME);
                 ct_info->local.hostname_src[NFTOP_MAX_HOSTNAME] = '\0';
             }
         }
@@ -480,21 +495,31 @@ void addr2host(struct Connection *ct_info) {
 
     if (!NFTOP_U_NUMERIC_DST) {
         if (strlen(ct_info->local.hostname_dst) < 1 && NFTOP_U_REDACT_DST == 0) {
-            memset(&ipaddr, 0, sizeof(struct sockaddr_in));
-            ipaddr.sin_family = ct_info->proto_l3;
-            ipaddr.sin_port = htons(0);
-            inet_pton(AF_INET, ct_info->local.dst, &ipaddr.sin_addr);
+            inet_pton(ct_info->proto_l3, ct_info->local.dst, (struct sockaddr *)sa);
+
+            if (ct_info->proto_l3 == AF_INET) {
+                inet_pton(ct_info->proto_l3, ct_info->local.dst, &((struct sockaddr_in *)sa)->sin_addr);
+
+                ((struct sockaddr_in *)sa)->sin_family = ct_info->proto_l3;
+                ((struct sockaddr_in *)sa)->sin_port = htons(0);
+            } else {
+                inet_pton(ct_info->proto_l3, ct_info->local.dst, &((struct sockaddr_in6 *)sa)->sin6_addr);
+
+                ((struct sockaddr_in6 *)sa)->sin6_family = ct_info->proto_l3;
+                ((struct sockaddr_in6 *)sa)->sin6_port = htons(0);
+            }
+
             from_cache = get_cached_dns(ct_info->local.dst);
             if (!from_cache) {
-                resolved = getnameinfo((struct sockaddr *) &ipaddr, sizeof(struct sockaddr_in), hostname_dst, sizeof(hostname_dst), NULL, 0, NI_NAMEREQD);
+                resolved = getnameinfo(sa, sa_len, hostname_dst, sizeof(hostname_dst), NULL, 0, NI_NAMEREQD);
                 if (resolved == 0) {
-                    strncpy(ct_info->local.hostname_dst, hostname_dst, NFTOP_MAX_HOSTNAME-1);
+                    strncpy(ct_info->local.hostname_dst, hostname_dst, NFTOP_MAX_HOSTNAME);
                     add_dns_cache(ct_info->local.dst, hostname_dst);
                 } else {
                     add_dns_cache(ct_info->local.dst, ct_info->local.dst);
                 }
             } else {
-                strncpy(ct_info->local.hostname_dst, from_cache, NFTOP_MAX_HOSTNAME-1);
+                strncpy(ct_info->local.hostname_dst, from_cache, NFTOP_MAX_HOSTNAME);
                 ct_info->local.hostname_dst[NFTOP_MAX_HOSTNAME] = '\0';
             }
         }
@@ -502,7 +527,7 @@ void addr2host(struct Connection *ct_info) {
 }
 
 int is_redirected() {
-   if (!isatty(fileno(stdout)) || NFTOP_U_CONTINUOUS) {
+   if (!isatty(fileno(stdout))) {
        return 1;
    }
    return 0;

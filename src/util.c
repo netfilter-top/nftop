@@ -11,9 +11,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ifaddrs.h>
-#include <arpa/inet.h>
 #include <net/if.h>
 #include <arpa/inet.h>
+#include <linux/netlink.h>
+#include <linux/rtnetlink.h>
+
+#ifndef __FILENAME__
+#   define __FILENAME__ "src/util.c"
+#endif
 
 #include "nftop.h"
 #include "util.h"
@@ -21,6 +26,8 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/select.h>
+
+#define ROUTESIZE 8192
 
 struct termios orig_termios;
 
@@ -372,47 +379,6 @@ bool isLocalAddress(char *addr, struct Interface **devices_list) {
     return false;
 }
 
-struct Interface *getIfaceNameForAddr(char *addr, uint8_t proto, struct Interface **devices_list) {
-    struct Interface *curr_dev;
-
-    struct sockaddr_storage check_ip;
-    check_ip.ss_family = proto;
-
-    if (proto == AF_INET) {
-        inet_pton(proto, addr, &((struct sockaddr_in *)(&check_ip))->sin_addr);
-    } else {
-        inet_pton(proto, addr, &((struct sockaddr_in6 *)(&check_ip))->sin6_addr);
-    }
-
-    for (curr_dev = (*devices_list); curr_dev != NULL; curr_dev = curr_dev->next) {
-        struct Address *address = curr_dev->addresses;
-
-        while (address != NULL) {
-            if (strcmp(addr, address->ip) == 0)
-                return curr_dev;
-
-            if (address->s_addr.ss_family == proto) {
-                if (proto == AF_INET) {
-                    if (subnet_match(proto, &((struct sockaddr_in *)(&address->s_addr))->sin_addr.s_addr,
-                            &((struct sockaddr_in *)(&check_ip))->sin_addr.s_addr,
-                            &((struct sockaddr_in *)(&address->s_mask))->sin_addr.s_addr) == 0) {
-                        return curr_dev;
-                    }
-                } else {
-                    if (subnet_match(proto, &((struct sockaddr_in6 *)(&address->s_addr))->sin6_addr,
-                            &((struct sockaddr_in6 *)(&check_ip))->sin6_addr,
-                            &((struct sockaddr_in6 *)(&address->s_mask))->sin6_addr) == 0) {
-                        return curr_dev;
-                    }
-                }
-            }
-            address = address->next;
-        }
-    }
-
-    return NULL;
-}
-
 bool is_dns_cached(char *ip) {
     struct DNSCache *temp = dns_cache;
 
@@ -540,4 +506,170 @@ int is_redirected() {
        return 1;
    }
    return 0;
+}
+
+struct Interface *getIfaceForRoute(int proto, struct sockaddr_storage *target_ip, struct sockaddr_storage *source_ip, int mark, struct Interface **devices_list) {
+    struct Interface *curr_dev;
+
+    int sock_fd;
+    struct sockaddr_nl sa;
+    struct rtattr *rta;
+    char buffer[ROUTESIZE];
+    char iface[IF_NAMESIZE];
+    strncpy(iface, "", IF_NAMESIZE);
+
+    // Create a netlink socket
+    sock_fd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
+    if (sock_fd == -1) {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Initialize sockaddr_nl structure
+    memset(&sa, 0, sizeof(sa));
+    sa.nl_family = AF_NETLINK;
+    sa.nl_groups = 0; // No multicast groups
+
+    // Bind the socket
+    if (bind(sock_fd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
+        perror("bind");
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Prepare and send the request message
+    struct {
+        struct nlmsghdr nlh;
+        struct rtmsg rtm;
+        char attrbuf[ROUTESIZE];
+    } req;
+
+    memset(&req, 0, sizeof(req));
+    req.nlh.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    req.nlh.nlmsg_type = RTM_GETROUTE;
+    req.nlh.nlmsg_flags = NLM_F_REQUEST;
+    req.rtm.rtm_family = proto;
+
+    // Add the target IP address to the request
+    rta = (struct rtattr *)((char *)&req + NLMSG_ALIGN(req.nlh.nlmsg_len));
+    rta->rta_type = RTA_DST;
+
+    int addr_size = 0;
+    switch(proto) {
+        case AF_INET:
+            addr_size = sizeof(struct in_addr);
+            break;
+        case AF_INET6:
+            addr_size = sizeof(struct in6_addr);
+            break;
+        default:
+            addr_size = sizeof(struct sockaddr_storage);
+    }
+
+    rta->rta_len = RTA_LENGTH(addr_size);
+    memcpy(RTA_DATA(rta), target_ip, addr_size);
+    // Set the request message length
+    req.nlh.nlmsg_len += RTA_LENGTH(addr_size);
+
+    // Add the source IP address
+    if (&source_ip->ss_family != NULL) {
+        rta = (struct rtattr *)((char *)&req + NLMSG_ALIGN(req.nlh.nlmsg_len));
+        rta->rta_type = RTA_SRC;
+        rta->rta_len = RTA_LENGTH(addr_size);
+        memcpy(RTA_DATA(rta), source_ip, addr_size);
+        req.nlh.nlmsg_len += RTA_LENGTH(addr_size);
+    }
+
+    if (mark != 0) {
+        rta = (struct rtattr *)((char *)&req + NLMSG_ALIGN(req.nlh.nlmsg_len));
+        rta->rta_type = RTA_MARK;
+        rta->rta_len = RTA_LENGTH(sizeof(int));
+        memcpy(RTA_DATA(rta), &mark, sizeof(int));
+        req.nlh.nlmsg_len += RTA_LENGTH(sizeof(int));
+    }
+
+    // Send the request
+    if (send(sock_fd, &req, req.nlh.nlmsg_len, 0) == -1) {
+        perror("send");
+        close(sock_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Receive and process the response
+    ssize_t len = recv(sock_fd, buffer, ROUTESIZE, 0);
+    struct nlmsghdr *nlh = (struct nlmsghdr *)buffer;
+
+    while (NLMSG_OK(nlh, len)) {
+        if (nlh->nlmsg_type == NLMSG_DONE) {
+            break;
+        }
+
+        if (nlh->nlmsg_type == RTM_NEWROUTE) {
+            struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nlh);
+            struct rtattr *rta = (struct rtattr *)RTM_RTA(rtm);
+            int route_len = RTM_PAYLOAD(nlh);
+            struct sockaddr_storage ip;
+            char ip_str[INET6_ADDRSTRLEN];
+            char if_str[IF_NAMESIZE];
+
+            while (RTA_OK(rta, route_len)) {
+                switch(rta->rta_type) {
+                    case RTA_IIF:
+                        if_indextoname(*(unsigned int *)RTA_DATA(rta), if_str);
+                        DLOG(NFTOP_FLAGS_DEBUG, "iif: %s (%u)\n", if_str, *(unsigned int *)RTA_DATA(rta));
+                        break;
+                    case RTA_OIF:
+                        if_indextoname(*(unsigned int *)RTA_DATA(rta), if_str);
+                        DLOG(NFTOP_FLAGS_DEBUG, "oif: %s (%u)\n", if_str, *(unsigned int *)RTA_DATA(rta));
+                        strncpy(iface, if_str, IF_NAMESIZE);
+                        break;
+                    case RTA_SRC:
+                        memcpy(&ip, RTA_DATA(rta), sizeof(struct sockaddr_storage));
+
+                        inet_ntop(proto, &ip, ip_str, INET6_ADDRSTRLEN);
+                        DLOG(NFTOP_FLAGS_DEBUG, "Source IP: %s\n", ip_str);
+                        break;
+                    case RTA_DST:
+                        memcpy(&ip, RTA_DATA(rta), sizeof(struct sockaddr_storage));
+
+                        inet_ntop(proto, &ip, ip_str, INET6_ADDRSTRLEN);
+                        DLOG(NFTOP_FLAGS_DEBUG, "Destination IP: %s\n", ip_str);
+                        break;
+                    case RTA_GATEWAY:
+                        memcpy(&ip, RTA_DATA(rta), sizeof(struct sockaddr_storage));
+
+                        inet_ntop(proto, &ip, ip_str, INET6_ADDRSTRLEN);
+                        DLOG(NFTOP_FLAGS_DEBUG, "Gateway: %s\n", ip_str);
+                        break;
+                    case RTA_PREFSRC:
+                        memcpy(&ip, RTA_DATA(rta), sizeof(struct sockaddr_storage));
+
+                        inet_ntop(proto, &ip, ip_str, INET6_ADDRSTRLEN);
+                        DLOG(NFTOP_FLAGS_DEBUG, "Pref-Source: %s\n", ip_str);
+                        break;
+                    default:
+                        DLOG(NFTOP_FLAGS_DEBUG, "rta->rta_type: %d\n", rta->rta_type);
+                        break;
+
+                }
+
+                memset(&ip_str, 0, sizeof(ip_str));
+                memset(&if_str, 0, sizeof(if_str));
+
+                rta = RTA_NEXT(rta, route_len);
+            }
+
+        }
+
+        nlh = NLMSG_NEXT(nlh, len);
+    }
+    close(sock_fd);
+
+    for (curr_dev = (*devices_list); curr_dev != NULL; curr_dev = curr_dev->next) {
+        if (strcmp(iface, curr_dev->name) == 0) {
+            return curr_dev;
+        }
+    }
+
+    return NULL;
 }

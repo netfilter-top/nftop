@@ -213,13 +213,21 @@ static int data_cb(enum nf_conntrack_msg_type type,
 
     new_ct->mark = nfct_get_attr_u32(ct, ATTR_MARK);
 
-    // TODO: probably better to use nfct_get_attr_grp and acquire ATTR_{ORIG,REPL}_{SRC,DST} to be protocol agnostic
+    // TODO: probably better to use nfct_get_attr_grp and acquire ATTR_{ORIG,REPL}_{SRC,DST} to be protocol agnostic and less verbose
     if (new_ct->proto_l3 == AF_INET) {
+        memcpy(&new_ct->local.src_ip, nfct_get_attr(ct, ATTR_ORIG_IPV4_SRC), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->local.dst_ip, nfct_get_attr(ct, ATTR_ORIG_IPV4_DST), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->remote.src_ip, nfct_get_attr(ct, ATTR_REPL_IPV4_SRC), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->remote.src_ip, nfct_get_attr(ct, ATTR_REPL_IPV4_DST), sizeof(struct sockaddr_storage));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_ORIG_IPV4_SRC), new_ct->local.src, sizeof(new_ct->local.src));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_ORIG_IPV4_DST), new_ct->local.dst, sizeof(new_ct->local.dst));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_REPL_IPV4_SRC), new_ct->remote.src, sizeof(new_ct->remote.src));
         inet_ntop(AF_INET, nfct_get_attr(ct, ATTR_REPL_IPV4_DST), new_ct->remote.dst, sizeof(new_ct->remote.dst));
     } else if (new_ct->proto_l3 == AF_INET6) {
+        memcpy(&new_ct->local.src_ip, nfct_get_attr(ct, ATTR_ORIG_IPV6_SRC), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->local.dst_ip, nfct_get_attr(ct, ATTR_ORIG_IPV6_DST), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->remote.src_ip, nfct_get_attr(ct, ATTR_REPL_IPV6_SRC), sizeof(struct sockaddr_storage));
+        memcpy(&new_ct->remote.src_ip, nfct_get_attr(ct, ATTR_REPL_IPV6_DST), sizeof(struct sockaddr_storage));
         inet_ntop(AF_INET6, nfct_get_attr(ct, ATTR_ORIG_IPV6_SRC), new_ct->local.src, sizeof(new_ct->local.src));
         inet_ntop(AF_INET6, nfct_get_attr(ct, ATTR_ORIG_IPV6_DST), new_ct->local.dst, sizeof(new_ct->local.dst));
         inet_ntop(AF_INET6, nfct_get_attr(ct, ATTR_REPL_IPV6_SRC), new_ct->remote.src, sizeof(new_ct->remote.src));
@@ -1027,12 +1035,22 @@ int main(int argc, char **argv) {
                 }
 
                 if (curr_ct->delta > 0 && curr_ct->bps_sum >= NFTOP_U_THRESH && match == true) {
-                    match = false; // reset the match to further investigate
+                    match = false; // reset the match to investigate higher details
 
-                    struct Interface *net_in_dev = getIfaceNameForAddr(curr_ct->local.dst, curr_ct->proto_l3, &devices_list);
+                    struct Interface *net_in_dev;
 
-                    if (net_in_dev == NULL) {
-                        net_in_dev = getIfaceNameForAddr(curr_ct->remote.dst, curr_ct->proto_l3, &devices_list);
+                    if (curr_ct->is_dst_nat || curr_ct->is_src_nat) {
+                        net_in_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.src_ip, &curr_ct->remote.dst_ip, curr_ct->mark, &devices_list);
+                    } else {
+                        if (curr_ct->proto_l3 == AF_INET6) {
+                            net_in_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.dst_ip, &curr_ct->local.src_ip, curr_ct->mark, &devices_list);
+                        } else {
+                            net_in_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.dst_ip, &curr_ct->local.src_ip, curr_ct->mark, &devices_list);
+                        }
+                    }
+
+                    if (net_in_dev == NULL || strcmp(net_in_dev->name, "lo") == 0) {
+                        net_in_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.src_ip, (struct sockaddr_storage *)NULL, curr_ct->mark, &devices_list);
                     }
 
                     if (net_in_dev == NULL) {
@@ -1049,22 +1067,29 @@ int main(int argc, char **argv) {
                                 addr->bps_tx += curr_ct->bps_tx;
                                 addr->bps_rx += curr_ct->bps_rx;
                                 addr->bps_sum += curr_ct->bps_tx + curr_ct->bps_rx;
+                                break;
                             }
                             addr = addr->next;
                         }
                     }
 
-                    struct Interface *net_out_dev = getIfaceNameForAddr(curr_ct->local.src, curr_ct->proto_l3, &devices_list);
-                    if (net_out_dev == NULL) {
-                        net_out_dev = getIfaceNameForAddr(curr_ct->local.dst, curr_ct->proto_l3, &devices_list);
+                    struct Interface *net_out_dev;
+                    if (curr_ct->is_dst_nat || curr_ct->is_src_nat) {
+                        net_out_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.dst_ip, &curr_ct->remote.dst_ip, curr_ct->mark, &devices_list);
+                    } else {
+                        net_out_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.dst_ip, &curr_ct->remote.dst_ip, curr_ct->mark, &devices_list);
+                    }
+
+                    if (net_out_dev == NULL || strcmp(net_out_dev->name, "lo") == 0) {
+                        net_out_dev = getIfaceForRoute(curr_ct->proto_l3, &curr_ct->local.src_ip, (struct sockaddr_storage *)NULL, curr_ct->mark, &devices_list);
                     }
 
                     if (net_out_dev == NULL) {
                         strcpy(curr_ct->net_out_dev.name, "*");
                     } else {
                         if (net_in_dev != net_out_dev) {
-                            net_out_dev->bps_tx += curr_ct->bps_rx;
-                            net_out_dev->bps_rx += curr_ct->bps_tx;
+                            net_out_dev->bps_tx += curr_ct->bps_tx;
+                            net_out_dev->bps_rx += curr_ct->bps_rx;
                             net_out_dev->bps_sum = curr_ct->bps_tx + curr_ct->bps_rx;
 
                             struct Address *addr = net_out_dev->addresses;
@@ -1073,6 +1098,7 @@ int main(int argc, char **argv) {
                                     addr->bps_tx += curr_ct->bps_tx;
                                     addr->bps_rx += curr_ct->bps_rx;
                                     addr->bps_sum += curr_ct->bps_tx + curr_ct->bps_rx;
+                                    break;
                                 }
                                 addr = addr->next;
                             }
@@ -1176,6 +1202,9 @@ int main(int argc, char **argv) {
         // clear out the display list(s)
         free_interfaces(&devices_list);
     }
+
+    if (current_head_ct != NULL)
+        freeConnectionTrackingList(current_head_ct);
 
     if (curr_ct != NULL)
         free(curr_ct);

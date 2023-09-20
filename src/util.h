@@ -39,7 +39,6 @@ void freeConnectionTrackingList(struct Connection*);
 void freeDeviceList(struct Interface*);
 void free_interfaces(struct Interface **);
 bool isLocalAddress(char *, struct Interface **);
-struct Interface *getIfaceNameForAddr(char *, uint8_t, struct Interface **);
 void enumerateNetworkDevices(struct Interface **);
 void addr2host(struct Connection *ct_info);
 int is_redirected();
@@ -48,5 +47,6 @@ bool is_dns_cached(char *ip);
 void add_dns_cache(char *ip, char *hostname);
 void free_dns_cache();
 char *get_cached_dns(char *);
+struct Interface *getIfaceForRoute(int, struct sockaddr_storage *, struct sockaddr_storage *, int, struct Interface **);
 
 #endif
